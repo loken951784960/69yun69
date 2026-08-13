@@ -57,9 +57,15 @@ if (typeof globalThis.fetch === "undefined") {
 
 
 export default {
-    async fetch(request, env) {
+    async fetch(request, env, ctx) {
         await initConfig(env);
         const url = new URL(request.url);
+
+        // Telegram webhook：收到 bot 消息时处理签到命令
+        if (url.pathname === "/webhook" && request.method === "POST") {
+            ctx.waitUntil(handleTelegramWebhook(request));
+            return new Response("ok", { status: 200 });
+        }
 
         if (url.pathname === "/tg") {
             return await handleTgMsg();
@@ -86,28 +92,73 @@ export default {
     },
 };
 
+// 核心签到逻辑（定时任务、URL 触发、Telegram 命令共用）
+async function doCheckIn() {
+    validateConfig();
+
+    const cookies = await loginAndGetCookies();
+    let result = await performCheckIn(cookies);
+
+    // 第二站（wjkc 网际快车面板），配置了 DOMAIN2 时自动签到
+    if (domain2) {
+        const r2 = await wjkcCheckIn(domain2, username2, password2);
+        result = result + '\n\n' + r2;
+    }
+
+    checkInResult = result;
+    return result;
+}
+
 async function handleCheckIn() {
     try {
-        validateConfig();
-
-        const cookies = await loginAndGetCookies();
-        let result = await performCheckIn(cookies);
-
-        // 第二站（wjkc 网际快车面板），配置了 DOMAIN2 时自动签到
-        if (domain2) {
-            const r2 = await wjkcCheckIn(domain2, username2, password2);
-            result = result + '\n\n' + r2;
-        }
-
-        checkInResult = result;
-
-        await sendMessage(checkInResult);
-        return new Response(checkInResult, { status: 200 });
+        const result = await doCheckIn();
+        await sendMessage(result);
+        return new Response(result, { status: 200 });
     } catch (error) {
         console.error("签到失败:", error);
         const errorMsg = `${checkInResult}\n🎁${error.message}`;
         await sendMessage(errorMsg);
         return new Response(errorMsg, { status: 500 });
+    }
+}
+
+// Telegram webhook 处理：收到 bot 消息时执行签到命令
+async function handleTelegramWebhook(request) {
+    try {
+        const update = await request.json();
+        const msg = update.message || update.edited_message;
+        if (!msg || !msg.text) {
+            return;
+        }
+
+        const chat = String(msg.chat.id);
+        const text = String(msg.text).trim();
+
+        // 安全校验：仅允许配置的 TG_ID（或群组 -100 前缀）触发签到
+        if (chatId && chat !== String(chatId)) {
+            console.log(`拒绝来自 chat=${chat} 的签到请求（未授权）`);
+            return;
+        }
+
+        // 支持命令：/checkin、/qd、/签到 等
+        const cmd = text.toLowerCase().split(' ')[0].split('@')[0];
+        if (['/checkin', '/qd', '/sign', '/签到', '/check', '/打卡'].includes(cmd)) {
+            await sendMessage("⏳ 正在签到，请稍候...", chat);
+            try {
+                const result = await doCheckIn();
+                await sendMessage(result, chat);
+            } catch (error) {
+                console.error("Telegram 触发签到失败:", error);
+                await sendMessage(`❌ 签到失败: ${error.message}`, chat);
+            }
+        } else {
+            await sendMessage(
+                "🤖 签到机器人可用命令：\n/checkin - 立即签到\n/help - 帮助信息",
+                chat
+            );
+        }
+    } catch (error) {
+        console.error("处理 Telegram 消息失败:", error);
     }
 }
 
@@ -431,8 +482,9 @@ async function wjkcCheckIn(siteDomain, siteUsername, sitePassword) {
 
 // ===================== 第二站支持结束 =====================
 
-async function sendMessage(msg) {
-    if (!botToken || !chatId) {  
+async function sendMessage(msg, targetChatId) {
+    const to = targetChatId || chatId;
+    if (!botToken || !to) {  
         console.log("Telegram 推送未启用. 消息内容:", msg);
         return;
     }
@@ -444,7 +496,7 @@ async function sendMessage(msg) {
         .replace("T", " ");
     
     const message = `执行时间: ${formattedTime}\n${msg}`;
-    const tgUrl = `https://api.telegram.org/bot${botToken}/sendMessage?chat_id=${chatId}&parse_mode=HTML&text=${encodeURIComponent(message)}`;
+    const tgUrl = `https://api.telegram.org/bot${botToken}/sendMessage?chat_id=${to}&parse_mode=HTML&text=${encodeURIComponent(message)}`;
 
     try {
         const response = await fetch(tgUrl, { method: "GET", headers: { "User-Agent": "Mozilla/5.0", "Accept": "application/json" } });
