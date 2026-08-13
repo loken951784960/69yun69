@@ -9,6 +9,8 @@ on:
 jobs:
   fetch:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     
     steps:
     - name: Checkout repository
@@ -50,4 +52,4 @@ jobs:
 
     - name: 推送远程
       run: |
-        git push# CONFIGURED: secrets set for 69yun69 check-in
+        git push
