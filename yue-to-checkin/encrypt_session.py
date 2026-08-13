@@ -7,6 +7,7 @@
 """
 import base64
 import getpass
+import gzip
 import os
 import sys
 
@@ -46,9 +47,10 @@ def main() -> None:
     with open(session_path, "rb") as f:
         data = f.read()
 
+    comp = gzip.compress(data)  # 先压缩, 让加密串 <48KB 可放入 GitHub Secret
     salt = os.urandom(SALT_LEN)
     key = derive_key(passphrase, salt)
-    token = Fernet(key).encrypt(data)
+    token = Fernet(key).encrypt(comp)
     b64 = base64.b64encode(salt + token).decode("utf-8")
 
     print(f"\n[OK] 已加密 session ({len(data)} bytes -> {len(b64)} 字符)")

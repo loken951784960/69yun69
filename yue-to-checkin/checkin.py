@@ -20,6 +20,7 @@
 """
 import asyncio
 import base64
+import gzip
 import os
 import re
 import sys
@@ -89,7 +90,11 @@ def decrypt_session() -> bytes:
         iterations=PBKDF2_ITERATIONS,
     )
     key = base64.urlsafe_b64encode(kdf.derive(passphrase.encode("utf-8")))
-    return Fernet(key).decrypt(token)
+    data = Fernet(key).decrypt(token)
+    try:
+        return gzip.decompress(data)  # 新版: session 先 gzip 压缩再加密 (体积 <48KB)
+    except Exception:
+        return data  # 兼容旧版未压缩格式
 
 
 async def fetch_init_data(client) -> str:
