@@ -1,0 +1,35 @@
+name: Yue.to Daily Check-in
+
+on:
+  schedule:
+    # UTC 16:00 = 北京时间 00:00（Actions cron 使用 UTC）
+    - cron: '0 16 * * *'
+  workflow_dispatch: # 允许手动触发测试
+
+jobs:
+  checkin:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: yue-to-checkin
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run daily check-in
+        env:
+          TG_API_ID: ${{ secrets.TG_API_ID }}
+          TG_API_HASH: ${{ secrets.TG_API_HASH }}
+          SESSION_B64: ${{ secrets.SESSION_B64 }}
+          SESSION_PASS: ${{ secrets.SESSION_PASS }}
+          # 结果推送目标：你的 Telegram 数字 ID（如 6357312260）；留空则发到 Saved Messages
+          NOTIFY_TO: ${{ secrets.NOTIFY_TO }}
+          # 设置 BOT_TOKEN 后，签到结果由 bot 主动推送给你（推荐）
+          BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+        run: python checkin.py
