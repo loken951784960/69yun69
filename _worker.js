@@ -155,7 +155,12 @@ async function performCheckIn(cookies) {
 
     const jsonResponse = await response.json();
     if (!jsonResponse.ret) {
-        throw new Error(`签到失败: ${jsonResponse.msg || "未知错误"}`);
+        const msg = String(jsonResponse.msg || "未知错误");
+        // 「已签到」类提示视为成功（当天已经签到过）
+        if (/已经签到|已签到|已签过|重复签到|SIGN_USE_MULTY_TIMES|HAS_SIGNED|ALREADY_SIGN/.test(msg)) {
+            return `🎉 签到结果 🎉\n${msg}`;
+        }
+        throw new Error(`签到失败: ${msg}`);
     }
 
     return `🎉 签到结果 🎉\n${jsonResponse.msg || "签到完成"}`;
