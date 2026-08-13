@@ -1,9 +1,6 @@
 重构
 
 
-![check-in](https://raw.githubusercontent.com/amclubs/am-check-in/main/check-in.jpg)
-  
- </details></center>
 
  #
  免责声明:
