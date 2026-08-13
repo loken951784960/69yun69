@@ -1,0 +1,4 @@
+telethon>=1.36.0
+cryptography>=42.0.0
+python-socks>=2.0.0
+requests>=2.31.0
