@@ -49,5 +49,5 @@ jobs:
         git commit --allow-empty -m "$(date '+%Y-%m-%d %H:%M:%S')更新"
 
     - name: 推送远程
-      run:
+      run: |
         git push# CONFIGURED: secrets set for 69yun69 check-in
