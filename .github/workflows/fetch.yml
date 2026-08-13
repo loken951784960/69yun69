@@ -33,6 +33,9 @@ jobs:
         DOMAIN: ${{ secrets.DOMAIN }}  # 从 GitHub Secrets 中读取配置信息
         USERNAME: ${{ secrets.USERNAME }}
         PASSWORD: ${{ secrets.PASSWORD }}
+        DOMAIN2: ${{ secrets.DOMAIN2 }}  # 第二站（wjkc 网际快车），账号缺省复用 USERNAME/PASSWORD
+        USERNAME2: ${{ secrets.USERNAME2 }}
+        PASSWORD2: ${{ secrets.PASSWORD2 }}
         TG_TOKEN: ${{ secrets.TG_TOKEN }}
         TG_ID: ${{ secrets.TG_ID }}
     
