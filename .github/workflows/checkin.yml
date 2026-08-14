@@ -1,4 +1,4 @@
-name: Yue.to Daily Check-in
+name: Yue.to Daily Check-in & Games
 
 on:
   schedule:
@@ -22,7 +22,7 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Run daily check-in
+      - name: Run daily check-in & mini-games
         env:
           TG_API_ID: ${{ secrets.TG_API_ID }}
           TG_API_HASH: ${{ secrets.TG_API_HASH }}
@@ -32,4 +32,4 @@ jobs:
           NOTIFY_TO: ${{ secrets.NOTIFY_TO }}
           # 设置 BOT_TOKEN 后，签到结果由 bot 主动推送给你（推荐）
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
-        run: python checkin.py
+        run: python games.py

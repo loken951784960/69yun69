@@ -1,6 +1,6 @@
-# Yue.to 悦通机场 · Telegram 每日自动签到
+# Yue.to 悦通机场 · Telegram 每日自动签到 + 小游戏
 
-通过 **Telethon (userbot)** 模拟你的 Telegram 账号，每天自动在悦通 Mini App 完成签到，全程在 **GitHub Actions** 免费运行，无需常开电脑。
+通过 **Telethon (userbot)** 模拟你的 Telegram 账号，每天自动在悦通 Mini App 完成签到和所有小游戏/活动（答题、竞猜、翻牌、免费抽、宝箱、养鸡场、抽卡、UNO 等），全程在 **GitHub Actions** 免费运行，无需常开电脑。
 
 ## 原理
 
@@ -91,9 +91,9 @@ python encrypt_session.py
 
 ### 6. 手动测试一次
 
-进入 **Actions → Yue.to Daily Check-in → Run workflow**，点按钮手动触发。
+进入 **Actions → Yue.to Daily Check-in & Games → Run workflow**，点按钮手动触发。
 
-约 1 分钟后查看运行日志：如果显示 `签到成功` 或 `今日已签到` 且推送到你 Telegram 即成功。若日志显示 `账号未绑定悦通账号`，请先完成步骤 3 再重试。
+约 1 分钟后查看运行日志：如果显示签到、答题、竞猜、宝箱、养鸡场、抽卡、UNO 等均已执行且推送到你 Telegram 即成功。若日志显示 `账号未绑定悦通账号`，请先完成步骤 3 再重试。
 
 ### 7. 以后全自动
 
@@ -105,7 +105,8 @@ python encrypt_session.py
 69yun69/
 ├── yue-to-checkin/
 │   ├── login.py            # 本机登录生成 session（跑一次）
-│   ├── checkin.py          # Actions 每日执行：解密→登录→签到→推送
+│   ├── checkin.py          # 基础签到与 API 封装（被 games.py 复用）
+│   ├── games.py            # Actions 每日执行：解密→登录→签到→全部小游戏→推送
 │   ├── encrypt_session.py  # 加密 session 输出 SESSION_B64
 │   ├── requirements.txt
 │   └── README.md
@@ -126,4 +127,4 @@ A: 是的，`cron: '0 16 * * *'` 是 UTC 时间，Actions 调度使用 UTC。
 A: 说明 TG 账号还没绑定悦通账号。按步骤 3 生成绑定码发给 `@yuetoo_bot`（`/bind 绑定码`），完成后重新触发一次即可。
 
 **Q: 签到需要每天都重新获取 initData 吗？**
-A: 是的，`checkin.py` 每次运行都会通过 RequestWebView 实时获取最新 `tgWebAppData`（含时间戳签名），后端校验通过后才允许签到。
+A: 是的，`games.py` 每次运行都会通过 RequestWebView 实时获取最新 `tgWebAppData`（含时间戳签名），后端校验通过后才允许执行签到与各小游戏。
