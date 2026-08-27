@@ -4,7 +4,7 @@ on:
   workflow_dispatch:  # 允许手动触发
   schedule:
       # 表达式生成  https://docs.github.com/en/actions/using-workflows/events-that-trigger-workflows#schedule
-    - cron: '17 16 * * *'  # 每天 ~00:17 北京时间（UTC 16:17），避开整点降低 GitHub schedule 延迟/跳过  # 每天 00:00 北京时间（UTC 16:00）执行签到，调整为你需要的时间
+    - cron: '17 16 * * *'  # 每天 ~00:17 北京时间（UTC 16:17），避开整点降低 GitHub schedule 延迟/跳过
 
 jobs:
   fetch:
@@ -14,12 +14,12 @@ jobs:
     
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v2
+      uses: actions/checkout@v4
       
     - name: Set up Node.js
-      uses: actions/setup-node@v3
+      uses: actions/setup-node@v4
       with:
-        node-version: '16'  # 可以根据实际需要修改 Node.js 版本
+        node-version: '22'  # LTS
 
     - name: Install dependencies
       run: |
