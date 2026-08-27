@@ -3,7 +3,7 @@ name: Yue.to Daily Check-in & Games
 on:
   schedule:
     # UTC 16:00 = 北京时间 00:00（Actions cron 使用 UTC）
-    - cron: '0 16 * * *'
+    - cron: '17 16 * * *'  # 每天 ~00:17 北京时间（UTC 16:17），避开整点降低 GitHub schedule 延迟/跳过
   workflow_dispatch: # 允许手动触发测试
 
 jobs:

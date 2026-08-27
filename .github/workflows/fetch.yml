@@ -4,7 +4,7 @@ on:
   workflow_dispatch:  # 允许手动触发
   schedule:
       # 表达式生成  https://docs.github.com/en/actions/using-workflows/events-that-trigger-workflows#schedule
-    - cron: '0 16 * * *'  # 每天 00:00 北京时间（UTC 16:00）执行签到，调整为你需要的时间
+    - cron: '17 16 * * *'  # 每天 ~00:17 北京时间（UTC 16:17），避开整点降低 GitHub schedule 延迟/跳过  # 每天 00:00 北京时间（UTC 16:00）执行签到，调整为你需要的时间
 
 jobs:
   fetch:
