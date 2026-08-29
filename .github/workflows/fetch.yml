@@ -1,58 +1,108 @@
 name: check-in-job
 
 on:
-  workflow_dispatch:  # 允许手动触发
+  workflow_dispatch:  # 鎵嬪姩瑙﹀彂锛堝己鍒舵墽琛岋紝涓嶇粡杩?guard锛?
   schedule:
-      # 表达式生成  https://docs.github.com/en/actions/using-workflows/events-that-trigger-workflows#schedule
-    - cron: '17 16 * * *'  # 每天 ~00:17 北京时间（UTC 16:17），避开整点降低 GitHub schedule 延迟/跳过
+      # 琛ㄨ揪寮忕敓鎴? https://docs.github.com/en/actions/using-workflows/events-that-trigger-workflows#schedule
+      # GitHub 鍦ㄩ珮宄版椂娈电殑 schedule 浼氬欢杩熺敋鑷宠烦杩囷紝鍥犳璁剧疆澶氫釜鏃堕棿鐐癸紱
+      # 姣忎釜 run 寮€澶寸敱 guard step 妫€鏌ャ€?0 灏忔椂鍐呮槸鍚﹀凡鏈夋垚鍔熻繍琛屻€嶏紝淇濊瘉姣忓ぉ鍙湡姝ｆ墽琛屼竴娆?
+    - cron: '17 16 * * *'  # 鍖椾含 00:17锛堜富锛?
+    - cron: '17 18 * * *'  # 鍖椾含 02:17锛堝厹搴?1锛?
+    - cron: '17 20 * * *'  # 鍖椾含 04:17锛堝厹搴?2锛?
+    - cron: '47 22 * * *'  # 鍖椾含 06:47锛堝厹搴?3锛?
+
+permissions:
+  contents: write
+  actions: read
+
+concurrency:
+  group: 69yun-checkin-job-daily
+  cancel-in-progress: false
 
 jobs:
   fetch:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    
+
     steps:
+    - name: Guard - 褰撳ぉ宸叉垚鍔熸墽琛岃繃鍒欒烦杩?
+      id: guard
+      if: github.event_name == 'schedule'
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        set -e
+        WF_FILE="${GITHUB_WORKFLOW_REF%%@*}"
+        WF_FILE="${WF_FILE##*/}"
+        echo "workflow file: $WF_FILE"
+        LAST=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow "$WF_FILE" \
+               --status success --limit 1 --json createdAt --jq '.[0].createdAt // empty' 2>/dev/null || true)
+        echo "last success run: ${LAST:-<none>}"
+        if [ -n "$LAST" ]; then
+          LAST_EPOCH=$(date -u -d "$LAST" +%s 2>/dev/null || echo 0)
+          NOW_EPOCH=$(date -u +%s)
+          DIFF=$(( NOW_EPOCH - LAST_EPOCH ))
+          echo "seconds since last success: $DIFF"
+          if [ "$DIFF" -lt 36000 ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "10 灏忔椂鍐呭凡鏈夋垚鍔熻繍琛岋紝璺宠繃鏈"
+            exit 0
+          fi
+        fi
+        RUNNING=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow "$WF_FILE" \
+                  --status in_progress --limit 5 --json databaseId --jq 'length' 2>/dev/null || true)
+        echo "in_progress runs (incl. self): ${RUNNING:-0}"
+        if [ "${RUNNING:-0}" -ge 2 ]; then
+          echo "skip=true" >> "$GITHUB_OUTPUT"
+          echo "宸叉湁鍙︿竴涓繍琛屽湪鎵ц涓紝璺宠繃鏈"
+          exit 0
+        fi
+        echo "skip=false" >> "$GITHUB_OUTPUT"
+
     - name: Checkout repository
+      if: steps.guard.outputs.skip != 'true'
       uses: actions/checkout@v4
-      
+
     - name: Set up Node.js
+      if: steps.guard.outputs.skip != 'true'
       uses: actions/setup-node@v4
       with:
         node-version: '22'  # LTS
 
     - name: Install dependencies
+      if: steps.guard.outputs.skip != 'true'
       run: |
         npm install
         npm install node-fetch
 
     - name: Run scheduled check-in
+      if: steps.guard.outputs.skip != 'true'
       run: |
-        node _worker.js  
+        node _worker.js
       env:
-        DOMAIN: ${{ secrets.DOMAIN }}  # 从 GitHub Secrets 中读取配置信息
+        DOMAIN: ${{ secrets.DOMAIN }}  # 浠?GitHub Secrets 涓鍙栭厤缃俊鎭?
         USERNAME: ${{ secrets.USERNAME }}
         PASSWORD: ${{ secrets.PASSWORD }}
-        DOMAIN2: ${{ secrets.DOMAIN2 }}  # 第二站（wjkc 网际快车），账号缺省复用 USERNAME/PASSWORD
+        DOMAIN2: ${{ secrets.DOMAIN2 }}  # 绗簩绔欙紙wjkc 缃戦檯蹇溅锛夛紝璐﹀彿缂虹渷澶嶇敤 USERNAME/PASSWORD
         USERNAME2: ${{ secrets.USERNAME2 }}
         PASSWORD2: ${{ secrets.PASSWORD2 }}
         TG_TOKEN: ${{ secrets.TG_TOKEN }}
         TG_ID: ${{ secrets.TG_ID }}
-    
-    # 👇 保活任务（关键）
-    - name: Checkout repository
+
+    # 馃憞 淇濇椿浠诲姟锛堝叧閿級
+    # 濮嬬粓鎵ц锛氬嵆浣夸笂闈㈢殑绛惧埌琚?guard 璺宠繃锛屼粨搴撲篃淇濇寔姣忔棩娲诲姩
+    - name: Checkout repository (keepalive)
       uses: actions/checkout@v4
       with:
-        fetch-depth: 0  # 获取完整的 git 历史
-        persist-credentials: true  # 保持凭证
+        fetch-depth: 0  # 鑾峰彇瀹屾暣鐨?git 鍘嗗彶
+        persist-credentials: true  # 淇濇寔鍑瘉
 
     - name: Keep repo alive
       run: |
         git config --local user.name "actions@github.com"
         git config --local user.email "GitHub Actions"
         git add .
-        git commit --allow-empty -m "$(date '+%Y-%m-%d %H:%M:%S')更新"
+        git commit --allow-empty -m "$(date '+%Y-%m-%d %H:%M:%S')鏇存柊"
 
-    - name: 推送远程
+    - name: 鎺ㄩ€佽繙绋?
       run: |
         git push
