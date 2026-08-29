@@ -2,9 +2,22 @@ name: Yue.to Daily Check-in & Games
 
 on:
   schedule:
-    # UTC 16:00 = 北京时间 00:00（Actions cron 使用 UTC）
-    - cron: '17 16 * * *'  # 每天 ~00:17 北京时间（UTC 16:17），避开整点降低 GitHub schedule 延迟/跳过
-  workflow_dispatch: # 允许手动触发测试
+    # Actions cron 浣跨敤 UTC锛涘寳浜椂闂?= UTC + 8
+    # GitHub 鍦ㄩ珮宄版椂娈电殑 schedule 浼氬欢杩熺敋鑷宠烦杩囷紝鍥犳璁剧疆澶氫釜鏃堕棿鐐癸紱
+    # 姣忎釜 run 寮€澶寸敱 guard step 妫€鏌ャ€?0 灏忔椂鍐呮槸鍚﹀凡鏈夋垚鍔熻繍琛屻€嶏紝淇濊瘉姣忓ぉ鍙湡姝ｆ墽琛屼竴娆?
+    - cron: '17 16 * * *'  # 鍖椾含 00:17锛堜富锛?
+    - cron: '17 18 * * *'  # 鍖椾含 02:17锛堝厹搴?1锛?
+    - cron: '17 20 * * *'  # 鍖椾含 04:17锛堝厹搴?2锛?
+    - cron: '47 22 * * *'  # 鍖椾含 06:47锛堝厹搴?3锛?
+  workflow_dispatch: # 鎵嬪姩瑙﹀彂锛堝己鍒舵墽琛岋紝涓嶇粡杩?guard锛?
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: yue-to-checkin-daily
+  cancel-in-progress: false
 
 jobs:
   checkin:
@@ -13,23 +26,62 @@ jobs:
       run:
         working-directory: yue-to-checkin
     steps:
+      - name: Guard - 褰撳ぉ宸叉垚鍔熸墽琛岃繃鍒欒烦杩?
+        id: guard
+        if: github.event_name == 'schedule'
+        working-directory: ${{ github.workspace }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -e
+          WF_FILE="${GITHUB_WORKFLOW_REF%%@*}"
+          WF_FILE="${WF_FILE##*/}"
+          echo "workflow file: $WF_FILE"
+          LAST=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow "$WF_FILE" \
+                 --status success --limit 1 --json createdAt --jq '.[0].createdAt // empty' 2>/dev/null || true)
+          echo "last success run: ${LAST:-<none>}"
+          if [ -n "$LAST" ]; then
+            LAST_EPOCH=$(date -u -d "$LAST" +%s 2>/dev/null || echo 0)
+            NOW_EPOCH=$(date -u +%s)
+            DIFF=$(( NOW_EPOCH - LAST_EPOCH ))
+            echo "seconds since last success: $DIFF"
+            if [ "$DIFF" -lt 36000 ]; then
+              echo "skip=true" >> "$GITHUB_OUTPUT"
+              echo "10 灏忔椂鍐呭凡鏈夋垚鍔熻繍琛岋紝璺宠繃鏈锛堥伩鍏嶉噸澶嶆秷鑰楃Н鍒?娆℃暟锛?
+              exit 0
+            fi
+          fi
+          RUNNING=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow "$WF_FILE" \
+                    --status in_progress --limit 5 --json databaseId --jq 'length' 2>/dev/null || true)
+          echo "in_progress runs (incl. self): ${RUNNING:-0}"
+          if [ "${RUNNING:-0}" -ge 2 ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "宸叉湁鍙︿竴涓繍琛屽湪鎵ц涓紝璺宠繃鏈"
+            exit 0
+          fi
+          echo "skip=false" >> "$GITHUB_OUTPUT"
+
       - uses: actions/checkout@v4
+        if: steps.guard.outputs.skip != 'true'
 
       - uses: actions/setup-python@v5
+        if: steps.guard.outputs.skip != 'true'
         with:
           python-version: '3.12'
 
       - name: Install dependencies
+        if: steps.guard.outputs.skip != 'true'
         run: pip install -r requirements.txt
 
       - name: Run daily check-in & mini-games
+        if: steps.guard.outputs.skip != 'true'
         env:
           TG_API_ID: ${{ secrets.TG_API_ID }}
           TG_API_HASH: ${{ secrets.TG_API_HASH }}
           SESSION_B64: ${{ secrets.SESSION_B64 }}
           SESSION_PASS: ${{ secrets.SESSION_PASS }}
-          # 结果推送目标：你的 Telegram 数字 ID（如 6357312260）；留空则发到 Saved Messages
+          # 缁撴灉鎺ㄩ€佺洰鏍囷細浣犵殑 Telegram 鏁板瓧 ID锛堝 6357312260锛夛紱鐣欑┖鍒欏彂鍒?Saved Messages
           NOTIFY_TO: ${{ secrets.NOTIFY_TO }}
-          # 设置 BOT_TOKEN 后，签到结果由 bot 主动推送给你（推荐）
+          # 璁剧疆 BOT_TOKEN 鍚庯紝绛惧埌缁撴灉鐢?bot 涓诲姩鎺ㄩ€佺粰浣狅紙鎺ㄨ崘锛?
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
         run: python games.py
