@@ -2,14 +2,14 @@ name: Yue.to Daily Check-in & Games
 
 on:
   schedule:
-    # Actions cron 浣跨敤 UTC锛涘寳浜椂闂?= UTC + 8
-    # GitHub 鍦ㄩ珮宄版椂娈电殑 schedule 浼氬欢杩熺敋鑷宠烦杩囷紝鍥犳璁剧疆澶氫釜鏃堕棿鐐癸紱
-    # 姣忎釜 run 寮€澶寸敱 guard step 妫€鏌ャ€?0 灏忔椂鍐呮槸鍚﹀凡鏈夋垚鍔熻繍琛屻€嶏紝淇濊瘉姣忓ぉ鍙湡姝ｆ墽琛屼竴娆?
-    - cron: '17 16 * * *'  # 鍖椾含 00:17锛堜富锛?
-    - cron: '17 18 * * *'  # 鍖椾含 02:17锛堝厹搴?1锛?
-    - cron: '17 20 * * *'  # 鍖椾含 04:17锛堝厹搴?2锛?
-    - cron: '47 22 * * *'  # 鍖椾含 06:47锛堝厹搴?3锛?
-  workflow_dispatch: # 鎵嬪姩瑙﹀彂锛堝己鍒舵墽琛岋紝涓嶇粡杩?guard锛?
+    # Actions cron 使用 UTC；北京时间 = UTC + 8
+    # GitHub 在高峰时段的 schedule 会延迟甚至跳过，因此设置多个时间点；
+    # 每个 run 开头由 guard step 检查「10 小时内是否已有成功运行」，保证每天只真正执行一次
+    - cron: '17 16 * * *'  # 北京 00:17（主）
+    - cron: '17 18 * * *'  # 北京 02:17（兜底 1）
+    - cron: '17 20 * * *'  # 北京 04:17（兜底 2）
+    - cron: '47 22 * * *'  # 北京 06:47（兜底 3）
+  workflow_dispatch: # 手动触发（强制执行，不经过 guard）
 
 permissions:
   contents: read
@@ -26,7 +26,7 @@ jobs:
       run:
         working-directory: yue-to-checkin
     steps:
-      - name: Guard - 褰撳ぉ宸叉垚鍔熸墽琛岃繃鍒欒烦杩?
+      - name: Guard - 当天已成功执行过则跳过
         id: guard
         if: github.event_name == 'schedule'
         working-directory: ${{ github.workspace }}
@@ -47,7 +47,7 @@ jobs:
             echo "seconds since last success: $DIFF"
             if [ "$DIFF" -lt 36000 ]; then
               echo "skip=true" >> "$GITHUB_OUTPUT"
-              echo "10 灏忔椂鍐呭凡鏈夋垚鍔熻繍琛岋紝璺宠繃鏈锛堥伩鍏嶉噸澶嶆秷鑰楃Н鍒?娆℃暟锛?
+              echo "10 小时内已有成功运行，跳过本次（避免重复消耗积分次数）"
               exit 0
             fi
           fi
@@ -56,7 +56,7 @@ jobs:
           echo "in_progress runs (incl. self): ${RUNNING:-0}"
           if [ "${RUNNING:-0}" -ge 2 ]; then
             echo "skip=true" >> "$GITHUB_OUTPUT"
-            echo "宸叉湁鍙︿竴涓繍琛屽湪鎵ц涓紝璺宠繃鏈"
+            echo "已有另一个运行在执行中，跳过本次"
             exit 0
           fi
           echo "skip=false" >> "$GITHUB_OUTPUT"
@@ -80,8 +80,8 @@ jobs:
           TG_API_HASH: ${{ secrets.TG_API_HASH }}
           SESSION_B64: ${{ secrets.SESSION_B64 }}
           SESSION_PASS: ${{ secrets.SESSION_PASS }}
-          # 缁撴灉鎺ㄩ€佺洰鏍囷細浣犵殑 Telegram 鏁板瓧 ID锛堝 6357312260锛夛紱鐣欑┖鍒欏彂鍒?Saved Messages
+          # 结果推送目标：你的 Telegram 数字 ID（如 6357312260）；留空则发到 Saved Messages
           NOTIFY_TO: ${{ secrets.NOTIFY_TO }}
-          # 璁剧疆 BOT_TOKEN 鍚庯紝绛惧埌缁撴灉鐢?bot 涓诲姩鎺ㄩ€佺粰浣狅紙鎺ㄨ崘锛?
+          # 设置 BOT_TOKEN 后，签到结果由 bot 主动推送给你（推荐）
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
         run: python games.py
