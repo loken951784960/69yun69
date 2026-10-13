@@ -472,7 +472,8 @@ async function wjkcCheckIn(siteDomain, siteUsername, sitePassword) {
         const msg = String(signData.msg || '未知错误');
         // 「已签到」类提示视为成功（当天已经签到过）
         if (/SIGN_USE_MULTY_TIMES|HAS_SIGNED|ALREADY_SIGN|已签到|已经签到/.test(msg)) {
-            return '🎉 wjkc 签到结果 🎉\n今日已签到（' + msg + '）';
+            // 重复签到也算成功，不再把 SIGN_USE_MULTY_TIMES 这种原始代码甩给用户
+            return '✅ wjkc 今日已签到（本日已完成）';
         }
         throw new Error('wjkc 签到失败: ' + msg);
     }
