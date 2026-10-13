@@ -3,13 +3,18 @@ name: Yue.to Daily Check-in & Games
 on:
   schedule:
     # Actions cron 使用 UTC；北京时间 = UTC + 8
-    # GitHub 在高峰时段的 schedule 会延迟甚至跳过，因此设置多个时间点；
-    # 每个 run 开头由 guard step 检查「10 小时内是否已有成功运行」，保证每天只真正执行一次
-    - cron: '17 16 * * *'  # 北京 00:17（主）
-    - cron: '17 18 * * *'  # 北京 02:17（兜底 1）
-    - cron: '17 20 * * *'  # 北京 04:17（兜底 2）
-    - cron: '47 22 * * *'  # 北京 06:47（兜底 3）
-  workflow_dispatch: # 手动触发（强制执行，不经过 guard）
+    # 每天只保留 2 个触发点：
+    #   ① Cloudflare checkin-trigger 在北京 00:20 派发本 workflow（主触发）
+    #   ② 下面这条 cron（北京 04:17）作为兜底，主触发失败时才真正补签一次
+    # guard 对 schedule 与自动派发都生效：当天（北京）已成功签到则跳过，
+    # 因此正常每天只真正签到 1 次，最多 2 次；手动勾选 force 才强制执行。
+    - cron: '17 20 * * *'  # 北京 04:17（兜底）
+  workflow_dispatch: # 手动触发；默认走 guard，勾选 force 才强制执行
+    inputs:
+      force:
+        description: '强制执行一次签到，跳过 guard（会导致当天重复签到）'
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -28,29 +33,43 @@ jobs:
     steps:
       - name: Guard - 当天已成功执行过则跳过
         id: guard
-        if: github.event_name == 'schedule'
+        # 永远执行本步骤：内部先判断 force，再判断「北京当天是否已成功签到」
+        # 正常每天只真正签到 1 次（主触发），最多 2 次（主触发失败时由兜底 cron 补签）
         working-directory: ${{ github.workspace }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          FORCE: ${{ github.event.inputs.force }}
         run: |
           set -e
           WF_FILE="${GITHUB_WORKFLOW_REF%%@*}"
           WF_FILE="${WF_FILE##*/}"
           echo "workflow file: $WF_FILE"
-          LAST=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow "$WF_FILE" \
-                 --status success --limit 1 --json createdAt --jq '.[0].createdAt // empty' 2>/dev/null || true)
-          echo "last success run: ${LAST:-<none>}"
-          if [ -n "$LAST" ]; then
-            LAST_EPOCH=$(date -u -d "$LAST" +%s 2>/dev/null || echo 0)
-            NOW_EPOCH=$(date -u +%s)
-            DIFF=$(( NOW_EPOCH - LAST_EPOCH ))
-            echo "seconds since last success: $DIFF"
-            if [ "$DIFF" -lt 36000 ]; then
-              echo "skip=true" >> "$GITHUB_OUTPUT"
-              echo "10 小时内已有成功运行，跳过本次（避免重复消耗积分次数）"
-              exit 0
-            fi
+          echo "事件类型: $GITHUB_EVENT_NAME / force=${FORCE:-<空>}"
+
+          # 手动触发时勾选 force=true 可强制执行（跳过 guard，会造成当天重复签到）
+          if [ "${FORCE}" = "true" ]; then
+            echo "force=true，跳过 guard，强制执行签到"
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+            exit 0
           fi
+
+          # 以北京时间划分「今天」，保证同一个北京日内只真正签到一次
+          TODAY_BJ=$(TZ=Asia/Shanghai date +%Y-%m-%d)
+          DAY_START_UTC=$(TZ=UTC date -d "$TODAY_BJ 00:00:00 +0800" +%Y-%m-%dT%H:%M:%SZ)
+          echo "北京时间今天: $TODAY_BJ （UTC 起点 $DAY_START_UTC）"
+
+          # 用 gh 内置 --jq（Go 实现，无需系统 jq；系统缺 jq 时不会退化成「永不跳过」）
+          SUCC_TODAY=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow "$WF_FILE" --limit 50 \
+                 --json createdAt,conclusion \
+                 --jq "[.[] | select(.createdAt >= \"$DAY_START_UTC\" and .conclusion == \"success\")] | length" \
+                 2>/dev/null || echo 0)
+          echo "今天（北京）已成功的 run 数: ${SUCC_TODAY:-0}"
+          if [ "${SUCC_TODAY:-0}" -ge 1 ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "今天（北京）已有成功运行，跳过本次签到"
+            exit 0
+          fi
+
           RUNNING=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow "$WF_FILE" \
                     --status in_progress --limit 5 --json databaseId --jq 'length' 2>/dev/null || true)
           echo "in_progress runs (incl. self): ${RUNNING:-0}"
@@ -60,7 +79,6 @@ jobs:
             exit 0
           fi
           echo "skip=false" >> "$GITHUB_OUTPUT"
-
       - uses: actions/checkout@v4
         if: steps.guard.outputs.skip != 'true'
 
